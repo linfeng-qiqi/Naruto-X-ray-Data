@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>100</ID>
+      <Description>"README - how this table is built (read me first)"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"=====================================================================
+ NARUTO MOBILE (com.tencent.KiHan) - MEMORY RESEARCH TABLE
+ Read-only memory analysis. For study / reference only.
+ Do NOT use in online matches. Do not use for anything illegal.
+=====================================================================
+
+WHAT THIS IS
+  A Cheat Engine companion to the GitHub project "naruto-hp-overlay".
+  Every mechanism that was actually verified is documented here as an
+  entry + English comments. Entries that resolve to a value are real
+  pointer chains, the rest are documentation-only rows.
+
+ADDRESSING MODEL (important)
+  Nothing is a fixed absolute address. Everything hangs off the module:
+
+      libil2cpp.so + &lt;static root offset>     &lt;- stable per game version
+        + off0 -> off1 -> ... -> offN         &lt;- pointer dereferences
+        + &lt;field offset>                      &lt;- offset inside the object
+
+  The absolute VA changes every time the game process restarts, the
+  account changes, or the map changes. That is why the table uses the
+  module + pointer-chain form instead of raw addresses.
+
+OFFSET ORDER CONVENTION IN THIS FILE
+  The &lt;Offsets> list is written in REVERSE evaluation order:
+  the LAST &lt;Offset> element is applied FIRST to the module base.
+  So this list:
+        &lt;Offset>178&lt;/Offset> &lt;Offset>18&lt;/Offset> ... &lt;Offset>19C30&lt;/Offset>
+  means:
+        [[[...[libil2cpp.so+4913E20]+19C30]...]+18]+178
+  Every entry repeats the full readable expression in its comments so
+  you can rebuild the chain even if your CE version orders them
+  differently.
+
+HOW TO RE-FIND EVERYTHING AFTER A GAME UPDATE
+  1) adb shell cat /proc/&lt;pid>/maps   -> confirm libil2cpp.so base
+  2) scan for the HP block TAIL signature (see group 01)
+  3) read the owner pointer at block+0x10 to pair the two copies
+  4) rebuild the chain from the static root, or just use the
+     --dump mode of the overlay binary, it does all of this.
+
+PAIR DISTANCE
+  Each entity stores its HP twice (value A = settled, value B = live).
+  The distance between the two copies is ACCOUNT SPECIFIC.
+  Sample config used here: self 0x56C0, enemy 0x36C0.
+  Always re-measure, never hardcode."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>110</ID>
+      <Description>"01 - HP BLOCK (verified structure)"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"Both players' HP is stored twice, and both copies share the
+same structure. Finding rule: scan the heap for the 24-byte TAIL,
+then rewind 0x38 bytes and validate the header.
+
+BLOCK LAYOUT (offsets from block base)
+  +0x00  float     current HP ratio, 0.0 empty .. 1.0 full
+  +0x04  byte[8]   eight zero bytes
+  +0x0C  int32     constant 1
+  +0x10  uint64    owner pointer (UI component that owns this bar)
+  +0x18  byte[32]  padding
+  +0x38  byte[24]  TAIL signature:
+                   01 00 00 00  01 00 00 00  02 00 00 00
+                   01 00 00 00  01 00 00 00  01 00 00 00
+
+VALIDATION (all must hold)
+  value in [0.0, 1.0]
+  bytes +04..+0B are all zero
+  int32 at +0C equals 1
+  owner at +0x10 is a readable heap pointer
+  HP may legitimately be 0 (defeated) - shape check must still pass.
+
+OWNER PAIRING
+  The two copies of one entity share the same owner value. Different
+  entities may share an owner too, so pairing uses owner + distance:
+  distance must fall in 0x100 .. 0x8000.
+
+STALE BLOCK FILTER
+  Blocks left over from the previous round have unique owners.
+  Rule: keep an owner only if it appears at least twice in the hit set."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>111</ID>
+      <Description>"Self HP - value A (settled / after damage)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>"libil2cpp.so"+4913E20</Address>
+      <Offsets>
+        <Offset>178</Offset>
+        <Offset>18</Offset>
+        <Offset>20</Offset>
+        <Offset>C0</Offset>
+        <Offset>80</Offset>
+        <Offset>230</Offset>
+        <Offset>19C30</Offset>
+      </Offsets>
+      <Comments>"Chain:
+  [[[[[[[libil2cpp.so+4913E20]+19C30]+230]+80]+C0]+20]+18]+178
+Value A only updates when damage is settled by the server logic."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>112</ID>
+      <Description>"Self HP - value B (live / immediate)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>"libil2cpp.so"+4913E20</Address>
+      <Offsets>
+        <Offset>4838</Offset>
+        <Offset>18</Offset>
+        <Offset>20</Offset>
+        <Offset>C0</Offset>
+        <Offset>80</Offset>
+        <Offset>230</Offset>
+        <Offset>19C30</Offset>
+      </Offsets>
+      <Comments>"Chain:
+  [[[[[[[libil2cpp.so+4913E20]+19C30]+230]+80]+C0]+20]+18]+4838
+
+0x4838 = 0x178 + 0x56C0 (sample pair distance, account specific).
+Value B changes the instant damage happens and matches the drawn bar."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>113</ID>
+      <Description>"Enemy HP - value A (settled / after damage)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>"libil2cpp.so"+5601570</Address>
+      <Offsets>
+        <Offset>178</Offset>
+        <Offset>28</Offset>
+        <Offset>0</Offset>
+        <Offset>28</Offset>
+        <Offset>8</Offset>
+        <Offset>70</Offset>
+        <Offset>1D0</Offset>
+        <Offset>140</Offset>
+        <Offset>B8</Offset>
+        <Offset>4FB0</Offset>
+      </Offsets>
+      <Comments>"Chain:
+  [[[[[[[[[[libil2cpp.so+5601570]+4FB0]+B8]+140]+1D0]+70]+8]+28]+0]+28]+178
+
+Note the +0 offset in the middle: it is an array element index 0 and is
+perfectly legal, not a mistake in the chain."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>114</ID>
+      <Description>"Enemy HP - value B (live / immediate)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>"libil2cpp.so"+5601570</Address>
+      <Offsets>
+        <Offset>3838</Offset>
+        <Offset>28</Offset>
+        <Offset>0</Offset>
+        <Offset>28</Offset>
+        <Offset>8</Offset>
+        <Offset>70</Offset>
+        <Offset>1D0</Offset>
+        <Offset>140</Offset>
+        <Offset>B8</Offset>
+        <Offset>4FB0</Offset>
+      </Offsets>
+      <Comments>"Chain:
+  [[[[[[[[[[libil2cpp.so+5601570]+4FB0]+B8]+140]+1D0]+70]+8]+28]+0]+28]+3838
+
+0x3838 = 0x178 + 0x36C0 (sample pair distance, account specific)."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>115</ID>
+      <Description>"Self HP block base address (resolved)"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>"libil2cpp.so"+4913E20</Address>
+      <Offsets>
+        <Offset>18</Offset>
+        <Offset>20</Offset>
+        <Offset>C0</Offset>
+        <Offset>80</Offset>
+        <Offset>230</Offset>
+        <Offset>19C30</Offset>
+      </Offsets>
+      <Comments>"Same chain as value A but WITHOUT the final +178, so this entry
+prints the HP block base itself. Useful to inspect the whole block:
+base+0x00 hp, base+0x10 owner, base+0x38 TAIL."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>116</ID>
+      <Description>"Self HP block owner pointer (+0x10)"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>"libil2cpp.so"+4913E20</Address>
+      <Offsets>
+        <Offset>10</Offset>
+        <Offset>18</Offset>
+        <Offset>20</Offset>
+        <Offset>C0</Offset>
+        <Offset>80</Offset>
+        <Offset>230</Offset>
+        <Offset>19C30</Offset>
+      </Offsets>
+      <Comments>"The owner field at block+0x10. Both copies of the same entity
+carry the same owner; this is the pairing key, not a unique entity id."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>120</ID>
+      <Description>"02 - OTHER VERIFIED STRUCTURES"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"Structures that were confirmed by measurement but are not the
+HP value itself."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>121</ID>
+      <Description>"Attribute record array - stride 0x240"</Description>
+      <VariableType>Float</VariableType>
+      <Address>"libil2cpp.so"+4913E20</Address>
+      <Offsets>
+        <Offset>178</Offset>
+        <Offset>18</Offset>
+        <Offset>20</Offset>
+        <Offset>C0</Offset>
+        <Offset>80</Offset>
+        <Offset>230</Offset>
+        <Offset>19C30</Offset>
+      </Offsets>
+      <Comments>"The HP value is also the +0x178 field of a record inside an
+array with stride 0x240. Example record bases seen at runtime:
+
+  72E53BB25240, 72E53BB25480, 72E53BB256C0, 72E53BB25900 ...
+
+Each record is a snapshot, not a live object: over 14 seconds only one
+field (+0x078) changed by a tiny amount, everything else stayed static.
+The record also holds about 19 pointers; expanding them two levels deep
+gave 60 objects and only 3 of them changed over 20 seconds (one is a
+copy of the global time). The skill cooldown is NOT in this tree."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>122</ID>
+      <Description>"Global time source 1 (float seconds)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>72E5C0FC64F8</Address>
+      <Comments>"Session specific address, re-scan after restart.
+Measured: 7825.425 -> 7855.513 over 29.85 real seconds (delta 30.088).
+It is a monotonically increasing float second counter, never resets."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>123</ID>
+      <Description>"Global time source 2 (float seconds)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>72E5C11506C8</Address>
+      <Comments>"Session specific. Measured delta 30.098 over 29.85 s.
+A second independent clock; the game keeps several."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>124</ID>
+      <Description>"Global time source 3 (float seconds)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>72E5C11506D8</Address>
+      <Comments>"Session specific. Measured delta 30.112 over 29.85 s.
+Sits 0x10 bytes after source 2, almost certainly the same clock struct."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>125</ID>
+      <Description>"Global time source 4 (float seconds)"</Description>
+      <VariableType>Float</VariableType>
+      <Address>72E4EA6B96B4</Address>
+      <Comments>"Session specific. Measured 8280.608 -> 8300.325.
+Found near the HUD root object rather than in the GC heap."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>130</ID>
+      <Description>"03 - IL2CPP RUNTIME INTROSPECTION"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"The game ships libil2cpp.so with an ENCRYPTED global-metadata.dat
+header, so the classic Il2CppDumper route fails:
+
+  on disk : 94 43 72 12 18 4B 9E EC 66 67 66 66 ...
+  normal  : AF 1B B1 FA (magic) 1F 00 00 00 (version)
+
+The magic is wrong, the version field is garbage, and a 56 GB scan of
+the running process found no plaintext AF 1B B1 FA either (decryption
+is done per block or the header is patched). Only the header is
+encrypted - the string blob stayed plaintext: "Assembly-CSharp" is at
+file offset 0xB7F73.
+
+So instead of parsing the metadata file, read the runtime classes:
+
+  1. every managed object starts with Il2CppClass*   (8 bytes)
+  2. Il2CppClass holds name / namespaze as char*
+  3. Il2CppClass.fields is an array of FieldInfo, stride 0x20,
+     and each FieldInfo directly contains the FIELD OFFSET
+
+VERIFIED LAYOUT (this build)
+
+  Il2CppClass
+    +0x00  Il2CppImage*  image
+    +0x10  char*         name
+    +0x18  char*         namespaze
+    +0x80  FieldInfo*    fields
+
+  FieldInfo (stride 0x20)
+    +0x00  char*         name
+    +0x08  Il2CppType*   type      (points into 0x4000_xxxx_xxxx range)
+    +0x10  Il2CppClass*  parent
+    +0x18  int32         offset
+    +0x1C  uint32        token
+
+  The +0x80 offset was cross checked on System.String: its field table
+  lists _stringLength at 0x10 and _firstChar at 0x14, which matches the
+  real C# string layout exactly, so the table is trustworthy.
+
+HOW THE BOOTSTRAP WORKS (no name known in advance)
+  Managed string layout: klass, monitor(0), length@0x10, chars@0x14.
+  Scan the rw heap for that shape, tally the klass values, and the most
+  frequent one is System.String's class:
+
+      72E5D027C1B0   528679 hits   &lt;- System.String
+      000000000000    13984
+      0000FFFFFFFF       84
+
+  From there: klass -> image -> types -> every class in the assembly.
+
+CAVEAT
+  The class table is rebuilt on every restart. A klass address that was
+  valid before the restart becomes an unreadable page afterwards. Never
+  hardcode a klass pointer in a table you want to keep."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>131</ID>
+      <Description>"System.String Il2CppClass* (example, session specific)"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>72E5D027C1B0</Address>
+      <Comments>"This address only proves the mechanism; it will be dead after a
+restart. Rebuild it with tools/find_strklass.py, then inspect with:
+
+  python tools/ic.py 72E5D027C1B0
+  -> klass 72E5D027C1B0  System.String
+     fields @klass+0x80 (7 entries)
+         _stringLength  off=0x0010
+         _firstChar     off=0x0014"</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>140</ID>
+      <Description>"04 - NOT FOUND: SKILL / SUMMON COOLDOWN (12 failed attempts)"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"Target: the remaining cooldown of skill 2. Known constraint: CD is
+exactly 10 seconds and the button shows an integer countdown.
+Result: not found. 12 methods, about 2.4 GB of readable heap, 0 hits,
+while the screen was clearly showing a 7 second countdown.
+
+EVERYTHING THAT WAS RULED OUT
+
+ 1. HP block +/-128KB
+    Only particles and render matrices, 5 changing pages.
+
+ 2. Attribute record 0x240 itself
+    Only +0x078 changed over 14 s, no countdown.
+
+ 3. HP heap region, +64MB, 3 Hz for 24 s
+    Only nine 0&lt;->10 square waves: a round-end flag that clears for the
+    whole region at once, not a countdown.
+
+ 4. GC heap 72E5C0000000-72E5D0000000, full 256 MB
+    No 0..10 sawtooth.
+
+ 5. HUD root object (owner 72E4EB03B360) +/-8MB
+    16 MB at 3 Hz for 30 s, nothing.
+
+ 6. Period alignment (strongest idea, still failed)
+    CD is 10 s, so two samples 5 s apart must differ by exactly 5.0
+    (0.5 for a 0..1 fillAmount). One pass covers the whole heap:
+        5.0 s gap -> 26125 hits
+        2.0 s gap -> 54206 hits
+        intersection -> 479
+    All 479 were 0&lt;->0.5 UI animations or garbage.
+
+ 7. Millisecond countdown (0..10000)
+    Only 14 animation values, max 1704.
+
+ 8. fillAmount (0..1 ring mask)
+    Note: an earlier filter required range >= 3 and silently killed all
+    0..1 candidates. Fixed, rescanned the HUD region, still nothing.
+
+ 9. Pointer back-scan (--ptrscan, 2.4 GB in ~20 s)
+    Holders of the HP block all live in 72E53B606xxx and become zero
+    after 20 s: a per-frame render snapshot list, not a persistent
+    object.
+
+10. Two-level object tree from the attribute record
+    19 pointers, 60 objects, 20 s sample: only 3 fields moved.
+
+11. Full-heap widget enumeration (--widgets)
+    Only 3 progress-bar widgets exist (two HP bars + one unknown),
+    all constant at 1.0. The skill mask is not that widget class.
+
+12. Remaining unmapped areas
+    72E5F0000000 (compressed data, 190k noise hits), 72E580/72E648/
+    72E670/72E6DC: zero hits.
+
+FALSE POSITIVES WORTH REMEMBERING
+    72E5C115xxx     recycled garbage
+    72E4C0E008EC    4x4 transform matrix, stride 0x50
+    72E4C017BD2C    5.000 -> 0.000 but actually -312149 garbage
+    72E5C7E5BF34    graphics buffer garbage
+    72E4C7CA45F8    graphics buffer, not the CD the user found by hand
+
+CONCLUSION
+  The cooldown is most likely NOT stored as a decreasing number. Two
+  plausible models remain:
+    a) endTime = global time + 10, computed on the fly (the four global
+       clocks above support this; no 0..10 intermediate value exists)
+    b) packed into a compressed struct or bitfield
+  The remaining sane route is full il2cpp class enumeration:
+  klass -> image -> types, filter names for Skill / CD / Cool, read the
+  field offsets. tools/ic.py already does the first half."</Comments>
+    </CheatEntry>
+
+    <CheatEntry>
+      <ID>150</ID>
+      <Description>"05 - NON-MEMORY MECHANISMS (screen + performance)"</Description>
+      <Options moHideChildren="1"/>
+      <LastState/>
+      <VariableType>Byte</VariableType>
+      <Address>0</Address>
+      <Comments>"Parts of the project that never touch memory. Documented here so
+this file is a complete description of the tool.
+
+BAR MEASUREMENT (pixels, not offsets)
+  Early versions hardcoded the band at y in [0.106H, 0.124H] while the
+  real bar sits at [0.077H, 0.088H], so every reading was zero. Now:
+    1. FindBarBand: for each row in the right half, count "orange"
+       pixels (R>90 AND R>1.5G AND R>1.4B). Consecutive rows above a
+       threshold give the real top and bottom of the bar.
+    2. Per row take the LONGEST CONTIGUOUS orange run, not the left and
+       right extremes: the character portrait has a gold rim that is
+       also orange and would double the width.
+    3. Ratio = run width / (0.1765 * screen width). 0.1765 = 339/1920,
+       the measured full-health width.
+    4. Take the 70th percentile over all rows to reject outline and
+       anti-aliasing rows.
+    5. Write the resulting rect back to overlay.ini [view] so drawing and
+       measuring share one source of truth.
+
+OWNERSHIP CROSS CHECK
+  Both entities look identical in memory, only owner and pair distance
+  tell them apart, and the distance differs per account. So every 3 s
+  the tool compares memory readings against the measured on-screen bars
+  and swaps self/enemy if they are inverted, then persists the result.
+  Two failed checks in a row invalidate the cache and trigger a rescan.
+
+READ PERFORMANCE
+  adb exec-out "toybox dd if=/proc/&lt;pid>/mem bs=4096 skip=&lt;page>"
+    1 MB  52 ms | 4 MB 119 ms | 16 MB 277 ms  (~58 MB/s per channel)
+  16 MB slices + 8 threads + guest gzip -1 + host zlib inflate
+    -> ~200 MB/s aggregate, full 2.6 GB scan in ~19 s
+  main thread aggregates every 120 ms and stops everyone on first hit
+    -> typically 2-4 s
+  cached start -> 0.4 s
+
+GOTCHAS
+  adb exec-out does not run a shell, so the whole pipeline must be one
+  quoted argument. Never put 2>/dev/null inside: dd treats it as an
+  argument and fails with "bad arg" - open a separate stderr pipe on
+  the host instead.
+  toybox gzip silently truncates input above 32 MB, so slices are 16 MB.
+  miniz tinfl only reaches 70 MB/s and became the bottleneck; switched
+  to zlib 1.3.1 inflate (300 MB/s+, only inflate sources are vendored)."</Comments>
+    </CheatEntry>
+  </CheatEntries>
+</CheatTable>
