@@ -47,7 +47,7 @@
 
 ## 效果
 
-![preview](docs/preview.png)
+![preview](naruto-hp-overlay/docs/preview.png)
 
 上图是叠加层的实际输出：左边是量出来的血条（满血 100.0%），右边是状态面板 —— 显示双方读数、当前归属判断，以及调试用的地址。血条的位置和长度都来自实测，不是写死的坐标。
 
@@ -349,7 +349,3 @@ naruto-hp-overlay/
 如果这份代码帮到了你的学习，欢迎点个 Star；如果你要拿它去做别的用途，请先确认合法合规。
 
 ---
-
-## License
-
-[MIT](LICENSE)
